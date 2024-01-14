@@ -63,6 +63,10 @@ static const uint64_t vdivs[][2] = {
 	VDIV_VALUES
 };
 
+static const uint64_t vdivs_pso2020[][2] = {
+	VDIV_VALUES_PSO2020
+};
+
 static const uint64_t vdivs_instrustar[][2] = {
 	VDIV_VALUES_INSTRUSTAR
 };
@@ -124,6 +128,12 @@ static const struct hantek_6xxx_profile dev_profiles[] = {
 		"Instrustar", "ISDS205B", "fx2lafw-instrustar-isds205b.fw",
 		ARRAY_AND_SIZE(acdc_coupling), TRUE,
 		ARRAY_AND_SIZE(vdivs_instrustar),
+	},
+	{
+		0x04b4, 0x6023, 0x1d50, 0x608e, 0x0006,
+		"Hantek", "PSO2020", "fx2lafw-hantek-pso2020.fw",
+		ARRAY_AND_SIZE(acdc_coupling), TRUE,
+		ARRAY_AND_SIZE(vdivs_pso2020),
 	},
 	ALL_ZERO
 };
@@ -546,6 +556,14 @@ static uint32_t data_amount(const struct sr_dev_inst *sdi)
 	return data_left_2;
 }
 
+static inline uint8_t bitrev(uint8_t byte)
+{
+	const uint8_t lut[16] = { 0x0, 0x8, 0x4, 0xc, 0x2, 0xa, 0x6, 0xe,
+				  0x1, 0x9, 0x5, 0xd, 0x3, 0xb, 0x7, 0xf };
+
+	return (lut[byte & 0xf] << 4) | lut[byte >> 4];
+}
+
 static void send_chunk(struct sr_dev_inst *sdi, unsigned char *buf,
 		int num_samples)
 {
@@ -575,6 +593,12 @@ static void send_chunk(struct sr_dev_inst *sdi, unsigned char *buf,
 		sr_err("Analog data buffer malloc failed.");
 		devc->dev_state = STOPPING;
 		return;
+	}
+
+	/* The Hantek PSO2020 has the bits of channel 0 reversed */
+	if (devc->profile->orig_pid == 0x6023) {
+		for (int i = 0; i < num_samples; i++)
+			buf[i*2] = bitrev(buf[i*2]);
 	}
 
 	for (int ch = 0; ch < NUM_CHANNELS; ch++) {
